@@ -1,16 +1,21 @@
 using System.Linq;
+using System.Numerics;
+using Content.Server._TP.Falling.Components;
 using Content.Server.Popups;
+using Content.Shared._TP.Falling;
 using Content.Shared.Climbing.Components;
 using Content.Shared.Climbing.Systems;
 using Content.Shared.Damage;
 using Content.Shared.Ghost;
-using Content.Shared.Gravity;
 using Content.Shared.Movement.Components;
 using Content.Shared.Popups;
 using Content.Shared.Revenant.Components;
 using Content.Shared.Salvage.Fulton;
 using Content.Shared.Shuttles.Components;
 using Content.Shared.Stunnable;
+using Content.Shared.Whitelist;
+using Robust.Client.GameObjects;
+using Robust.Shared.Map;
 using Robust.Shared.Random;
 using Robust.Shared.Timing;
 
@@ -26,13 +31,15 @@ namespace Content.Server._TP.Falling.Systems
         [Dependency] private readonly IGameTiming _timing = default!;
         [Dependency] private readonly SharedTransformSystem _transformSystem = default!;
         [Dependency] private readonly ClimbSystem _climb = default!;
+        [Dependency] private readonly EntityWhitelistSystem _whitelistSystem = default!;
 
         private const int MaxRandomTeleportAttempts = 20; // The # of times it's going to try to find a valid spot to randomly teleport an object
 
         public override void Initialize()
         {
             base.Initialize();
-            SubscribeLocalEvent<Components.FallSystemComponent, EntParentChangedMessage>(OnEntParentChanged);
+
+            SubscribeLocalEvent<FallSystemComponent, EntParentChangedMessage>(OnEntParentChanged);
         }
 
         public override void Update(float frameTime)
@@ -56,8 +63,8 @@ namespace Content.Server._TP.Falling.Systems
                 if (HasComp<TriesteAirspaceComponent>(entityParent) &&
                     jumpComp is { IsJumping: false, WasJumping: true })
                 {
-                    if (TryComp<Components.FallSystemComponent>(uid, out var fallSystemComponent))
-                        HandleFall(uid, fallSystemComponent);
+                    if (TryComp<FallSystemComponent>(uid, out var fallSystemComponent))
+                        TryFall(uid, fallSystemComponent);
                 }
 
                 jumpComp.WasJumping = jumpComp.IsJumping;
@@ -65,7 +72,7 @@ namespace Content.Server._TP.Falling.Systems
 
             // This part catches if the player has climbed over the railing
             // and will force them to stop (and fall)!
-            var fallQuery = EntityQueryEnumerator<Components.FallSystemComponent>();
+            var fallQuery = EntityQueryEnumerator<FallSystemComponent>();
             while (fallQuery.MoveNext(out var uid, out var fallComp))
             {
                 // Skip if already handled by jumping logic above
@@ -85,108 +92,63 @@ namespace Content.Server._TP.Falling.Systems
 
                     // Now check if they've been knocked down (aka slipped)
                     if (TryComp<KnockedDownComponent>(uid, out _))
-                        HandleFall(uid, fallComp);
+                        TryFall(uid, fallComp);
 
                     // Force stop climbing if they're in airspace
                     if (TryComp<ClimbingComponent>(uid, out var climbComp) && climbComp.IsClimbing)
                         _climb.StopClimb(uid, climbComp);
 
-                    HandleFall(uid, fallComp);
+                    TryFall(uid, fallComp);
                 }
             }
         }
 
+        private bool ExemptFromFalling(EntityUid uid)
+        {
+            if (!TryComp<TriesteAirspaceComponent>(Transform(uid).MapUid, out var airspace))
+                return true;
 
-        private void OnEntParentChanged(EntityUid owner, Components.FallSystemComponent component, EntParentChangedMessage args) // called when the entity changes parents
+            return _whitelistSystem.IsBlacklistPass(airspace.Exempt, uid);
+        }
+
+        private void OnEntParentChanged(Entity<FallSystemComponent> ent, ref EntParentChangedMessage args) // called when the entity changes parents
         {
             // A check that should fix the round-start crash/restart. - Cookie (FatherCheese)
             // If the entity is not initialized, or we're below 10 seconds, return.
-            if (MetaData(owner).EntityLifeStage < EntityLifeStage.MapInitialized)
-            {
+            if (MetaData(ent).EntityLifeStage < EntityLifeStage.MapInitialized)
                 return;
-            }
 
             // A check to see if the player jumped from one grid to
             // another, and if so, return, so they don't fall.
-            if (args.OldParent == null || args.Transform.GridUid != null ||
-                TerminatingOrDeleted(
-                    owner))
-            {
-                return;
-            }
-
-            if (ExemptFromFalling(owner))
+            if (args.OldParent == null ||
+                args.Transform.GridUid != null ||
+                TerminatingOrDeleted(ent.Owner))
                 return;
 
-            var ownerParent = Transform(owner).ParentUid;
-            if (!HasComp<TriesteAirspaceComponent>(ownerParent))
-            {
+            if (ExemptFromFalling(ent.Owner))
                 return;
-            }
+
+            if (!TryFall(ent.Owner, ent.Comp))
+                return;
 
             // Force stop climbing when entering airspace via parent change
-            if (TryComp<ClimbingComponent>(owner, out var climbComp) && climbComp.IsClimbing)
-            {
-                _climb.StopClimb(owner, climbComp);
-            }
-
-            HandleFall(owner, component);
+            if (TryComp<ClimbingComponent>(ent.Owner, out var climbComp) && climbComp.IsClimbing)
+                _climb.StopClimb(ent.Owner, climbComp);
         }
 
-        /// <summary>
-        ///     A method of different components that are exempt from falling.
-        /// </summary>
-        /// <param name="owner">Entity UID</param>
-        /// <returns>Returns true if the comp exists, otherwise returns false</returns>
-        private bool ExemptFromFalling(EntityUid owner)
+        private bool TryFall(EntityUid owner, FallSystemComponent component)
         {
-            if (HasComp<FultonedComponent>(owner))
-            {
+            if (!TryComp<TriesteAirspaceComponent>(Transform(owner).MapUid, out var map))
                 return true;
-            }
 
-            if (HasComp<GhostComponent>(owner))
-            {
-                return true;
-            }
-
-            if (HasComp<NoFTLComponent>(owner))
-            {
-                return true;
-            }
-
-            if (HasComp<CanMoveInAirComponent>(owner))
-            {
-                return true;
-            }
-
-            if (HasComp<RevenantComponent>(owner))
-            {
-                return true;
-            }
-
-            if (HasComp<JumpingComponent>(owner))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        private void HandleFall(EntityUid owner, Components.FallSystemComponent component)
-        {
-            var destination = EntityManager.EntityQuery<Components.FallingDestinationComponent>().FirstOrDefault();
-            if (destination != null)
-            {
-                // Teleport to the first destination's coordinates
-                Transform(owner).Coordinates = Transform(destination.Owner).Coordinates;
-            }
-            else
+            if (map.Destination is not { } destination)
             {
                 // If there's no destination, something broke
                 Log.Error($"No valid falling sites available!");
-                return;
+                return false;
             }
+
+            _transformSystem.SetCoordinates(owner, new EntityCoordinates(destination, Vector2.Zero));
 
             // Stuns the fall-ee for five seconds
             var stunTime = TimeSpan.FromSeconds(5);
@@ -205,9 +167,11 @@ namespace Content.Server._TP.Falling.Systems
 
             // Randomly teleports you in a radius around the landing zone
             TeleportRandomly(owner, component);
+
+            return true;
         }
 
-        private void TeleportRandomly(EntityUid owner, Components.FallSystemComponent component)
+        private void TeleportRandomly(EntityUid owner, FallSystemComponent component)
         {
             var coords = Transform(owner).Coordinates;
             var newCoords = coords; // Start with the current coordinates
