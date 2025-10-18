@@ -1,3 +1,8 @@
+using Content.Shared.Chasm;
+using Robust.Client.Animations;
+using Robust.Client.GameObjects;
+using Robust.Shared.Animations;
+
 namespace Content.Client._TP14.Falling;
 
 /// <summary>
@@ -5,7 +10,12 @@ namespace Content.Client._TP14.Falling;
 /// </summary>
 public sealed class PlatformFallingVisualsSystem : EntitySystem
 {
-    /// <inheritdoc/>
+
+    [Dependency] private readonly AnimationPlayerSystem _anim = default!;
+    [Dependency] private readonly SpriteSystem _sprite = default!;
+
+    private readonly string _platformFallAnimationKey = "platform_fall";
+
     public override void Initialize()
     {
 
@@ -24,10 +34,10 @@ public sealed class PlatformFallingVisualsSystem : EntitySystem
         if (!TryComp<AnimationPlayerComponent>(uid, out var player))
             return;
 
-        if (_anim.HasRunningAnimation(player, _chasmFallAnimationKey))
+        if (_anim.HasRunningAnimation(player, _platformFallAnimationKey))
             return;
 
-        _anim.Play((uid, player), GetFallingAnimation(component), _chasmFallAnimationKey);
+        _anim.Play((uid, player), GetFallingAnimation(component), _platformFallAnimationKey);
     }
 
     private void OnComponentRemove(EntityUid uid, ChasmFallingComponent component, ComponentRemove args)
@@ -40,8 +50,8 @@ public sealed class PlatformFallingVisualsSystem : EntitySystem
         if (!TryComp<AnimationPlayerComponent>(uid, out var player))
             return;
 
-        if (_anim.HasRunningAnimation(player, _chasmFallAnimationKey))
-            _anim.Stop((uid, player), _chasmFallAnimationKey);
+        if (_anim.HasRunningAnimation(player, _platformFallAnimationKey))
+            _anim.Stop((uid, player), _platformFallAnimationKey);
     }
 
     private Animation GetFallingAnimation(ChasmFallingComponent component)

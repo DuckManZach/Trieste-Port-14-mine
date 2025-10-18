@@ -11,4 +11,10 @@ public sealed partial class PlatformFallingComponent : Component
     /// </summary>
     [DataField]
     public TimeSpan AnimationTime = TimeSpan.FromSeconds(1.5f);
+
+    [DataField]
+    public float MaxRandomRadius { get; set; } = 20.0f; // Decides the random teleport of the FallSystem
+
+    [DataField]
+    public EntityUid Destination;
 }
