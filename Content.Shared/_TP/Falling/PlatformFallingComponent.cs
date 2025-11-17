@@ -1,3 +1,7 @@
+using System.Numerics;
+using Robust.Shared.Audio;
+using Robust.Shared.Serialization.TypeSerializers.Implementations.Custom;
+
 namespace Content.Shared._TP.Falling;
 
 /// <summary>
@@ -17,4 +21,26 @@ public sealed partial class PlatformFallingComponent : Component
 
     [DataField]
     public EntityUid Destination;
+
+    /// <summary>
+    ///     Original scale of the object so it can be restored if the component is removed in the middle of the animation
+    /// </summary>
+    public Vector2 OriginalScale = Vector2.Zero;
+
+    /// <summary>
+    ///     Scale that the animation should bring entities to.
+    /// </summary>
+    public Vector2 AnimationScale = new Vector2(0.01f, 0.01f);
+
+    [DataField]
+    public SoundSpecifier FallingSound = new SoundPathSpecifier("/Audio/Effects/falling.ogg");
+
+    /// <summary>
+    ///     Time it should take in seconds for the entity to actually fall
+    /// </summary>
+    [DataField]
+    public TimeSpan DeletionTime = TimeSpan.FromSeconds(1.8f);
+
+    [DataField(customTypeSerializer:typeof(TimeOffsetSerializer))]
+    public TimeSpan NextDeletionTime = TimeSpan.Zero;
 }

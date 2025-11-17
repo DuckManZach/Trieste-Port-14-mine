@@ -1,3 +1,4 @@
+using Content.Shared._TP.Falling;
 using Content.Shared.Chasm;
 using Robust.Client.Animations;
 using Robust.Client.GameObjects;
@@ -5,23 +6,23 @@ using Robust.Shared.Animations;
 
 namespace Content.Client._TP14.Falling;
 
-/// <summary>
-/// This handles...
-/// </summary>
 public sealed class PlatformFallingVisualsSystem : EntitySystem
 {
 
     [Dependency] private readonly AnimationPlayerSystem _anim = default!;
     [Dependency] private readonly SpriteSystem _sprite = default!;
 
-    private readonly string _platformFallAnimationKey = "platform_fall";
+    private readonly string _platformFallAnimationKey = "chasm_fall";
 
     public override void Initialize()
     {
+        base.Initialize();
 
+        SubscribeLocalEvent<PlatformFallingComponent, ComponentInit>(OnComponentInit);
+        SubscribeLocalEvent<PlatformFallingComponent, ComponentRemove>(OnComponentRemove);
     }
 
-    private void OnComponentInit(EntityUid uid, ChasmFallingComponent component, ComponentInit args)
+    private void OnComponentInit(EntityUid uid, PlatformFallingComponent component, ComponentInit args)
     {
         if (!TryComp<SpriteComponent>(uid, out var sprite) ||
             TerminatingOrDeleted(uid))
@@ -40,7 +41,7 @@ public sealed class PlatformFallingVisualsSystem : EntitySystem
         _anim.Play((uid, player), GetFallingAnimation(component), _platformFallAnimationKey);
     }
 
-    private void OnComponentRemove(EntityUid uid, ChasmFallingComponent component, ComponentRemove args)
+    private void OnComponentRemove(EntityUid uid, PlatformFallingComponent component, ComponentRemove args)
     {
         if (!TryComp<SpriteComponent>(uid, out var sprite))
             return;
@@ -54,7 +55,7 @@ public sealed class PlatformFallingVisualsSystem : EntitySystem
             _anim.Stop((uid, player), _platformFallAnimationKey);
     }
 
-    private Animation GetFallingAnimation(ChasmFallingComponent component)
+    private Animation GetFallingAnimation(PlatformFallingComponent component)
     {
         var length = component.AnimationTime;
 

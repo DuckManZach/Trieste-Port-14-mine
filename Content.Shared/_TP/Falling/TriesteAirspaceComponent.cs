@@ -9,7 +9,7 @@ namespace Content.Shared._TP.Falling
         /// If it matches with this, it will be exempt from falling
         /// </summary>
         [DataField]
-        public EntityWhitelist Exempt = new EntityWhitelist()
+        public EntityWhitelist Exempt = new()
         {
             Components =
             [
@@ -18,7 +18,6 @@ namespace Content.Shared._TP.Falling
                 "NoFTL",
                 "CanMoveInAir",
                 "Revenant",
-                "Jumping",
             ],
         };
 
@@ -26,6 +25,6 @@ namespace Content.Shared._TP.Falling
         /// UID of the map you will fall to
         /// </summary>
         [DataField]
-        public EntityUid? Destination;
+        public EntityUid Destination;
     }
 }
